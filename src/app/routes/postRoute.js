@@ -4,4 +4,6 @@ module.exports = function (app) {
 
   app.get("/app/search", jwtMiddleware, post.selectPost);
   app.get("/app/search/:keyword", jwtMiddleware, post.selectKeywordPost);
+
+  app.get("/app/posts/:postId", jwtMiddleware, post.selectArticleInfo);
 };

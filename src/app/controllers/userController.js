@@ -215,30 +215,6 @@ exports.signIn = async function (req, res) {
   }
 };
 
-// selectUserProfile
-exports.selectUserProfile = async function (req, res) {
-  const { id } = req.verifiedToken;
-  try {
-    const userProfileRows = await userDao.selectUserProfile(id);
-    if (userProfileRows.length > 0) {
-      return res.json({
-        isSuccess: true,
-        code: 200,
-        message: "유저프로필 정보 검색 성공",
-        data: userProfileRows[0],
-      });
-    }
-    return res.json({
-      isSucess: false,
-      code: 300,
-      message: "유저 프로필 정보가 존재하지 않습니다.",
-    });
-  } catch (err) {
-    logger.error(`App - selectUserProfile Query error\n: ${err.message}`);
-    return res.status(500).send(`Error: ${err.message}`);
-  }
-};
-
 /**
  update : 2019.09.23
  03.check API = token 검증
@@ -250,4 +226,37 @@ exports.check = async function (req, res) {
     message: "검증 성공",
     info: req.verifiedToken,
   });
+};
+
+// 04.profile API = 유저 프로필 조회
+exports.profile = async function (req, res) {
+  const { id } = req.verifiedToken;
+  const { userId } = req.params;
+  if (id === Number(userId)) {
+    try {
+      const userProfileRows = await userDao.selectUserProfile(id);
+      if (userProfileRows.length > 0) {
+        return res.json({
+          isSuccess: true,
+          code: 200,
+          message: "유저프로필 정보 검색 성공",
+          data: userProfileRows[0],
+        });
+      }
+      return res.json({
+        isSucess: false,
+        code: 300,
+        message: "유저 프로필 정보가 존재하지 않습니다.",
+      });
+    } catch (err) {
+      logger.error(`App - selectUserProfile Query error\n: ${err.message}`);
+      return res.status(500).send(`Error: ${err.message}`);
+    }
+  } else {
+    return res.json({
+      isSucess: false,
+      code: 300,
+      message: "권한이 없습니다. 로그인을 먼저 해주세요!",
+    });
+  }
 };
