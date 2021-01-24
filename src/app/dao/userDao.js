@@ -1,14 +1,14 @@
 const { pool } = require("../../../config/database");
 
 // Signup
-async function userEmailCheck(email) {
+async function userEmailCheck(email, userIdx) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectEmailQuery = `
-                SELECT email, nickname 
-                FROM UserInfo 
-                WHERE email = ?;
+                SELECT email
+                FROM User
+                WHERE email = ? and userId != ?;
                 `;
-  const selectEmailParams = [email];
+  const selectEmailParams = [email, userIdx];
   const [emailRows] = await connection.query(
     selectEmailQuery,
     selectEmailParams
@@ -18,26 +18,42 @@ async function userEmailCheck(email) {
   return emailRows;
 }
 
-async function userNicknameCheck(nickname) {
+async function userNameCheck(userName) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectNicknameQuery = `
-                SELECT email, nickname 
-                FROM UserInfo 
-                WHERE nickname = ?;
+                SELECT userName 
+                FROM User
+                WHERE userName = ?;
                 `;
-  const selectNicknameParams = [nickname];
-  const [nicknameRows] = await connection.query(
+  const selectNicknameParams = [userName];
+  const [userNameRows] = await connection.query(
     selectNicknameQuery,
     selectNicknameParams
   );
   connection.release();
-  return nicknameRows;
+  return userNameRows;
+}
+
+async function phoneNumberCheck(phoneNumber) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const selectphoneNumberQuery = `
+                SELECT phoneNumber 
+                FROM User
+                WHERE phoneNumber = ?;
+                `;
+  const selectphoneNumberParams = [phoneNumber];
+  const [phoneNumberRows] = await connection.query(
+    selectphoneNumberQuery,
+    selectphoneNumberParams
+  );
+  connection.release();
+  return phoneNumberRows;
 }
 
 async function insertUserInfo(insertUserInfoParams) {
   const connection = await pool.getConnection(async (conn) => conn);
   const insertUserInfoQuery = `
-        INSERT INTO UserInfo(email, pswd, nickname)
+        INSERT INTO User(userName, profileImageUrl, phoneNumber)
         VALUES (?, ?, ?);
     `;
   const insertUserInfoRow = await connection.query(
@@ -66,13 +82,42 @@ async function selectUserInfo(phoneNumber) {
   return userInfoRows;
 }
 
-// selectUserProfile
+// 회원정보 수정
+async function updateUserInfo(
+  userName,
+  profileImageUrl,
+  phoneNumber,
+  email,
+  userIdx
+) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const updateUserInfoQuery = `
+            UPDATE User
+            SET userName = ?, profileImageUrl = ?, phoneNumber= ?, email= ?
+            WHERE userId = ?;
+                `;
+  let updateUserInfoParams = [
+    userName,
+    profileImageUrl,
+    phoneNumber,
+    email,
+    userIdx,
+  ];
+  const [updateUserInfoRows] = await connection.query(
+    updateUserInfoQuery,
+    updateUserInfoParams
+  );
+  connection.release();
+  return [updateUserInfoRows];
+}
+
+// 사용자 프로필 조회
 async function selectUserProfile(userId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectUserProfileQuery = `
                 SELECT userId, userName, profileImageUrl, ratingScore 
                 FROM User 
-                WHERE userId = ?;
+                WHERE userId = ? and userStatus = 'Y';
                 `;
 
   let selectUserProfileParams = [userId];
@@ -82,6 +127,23 @@ async function selectUserProfile(userId) {
   );
   connection.release();
   return userProfileRows;
+}
+
+// 회원 탈퇴
+async function deleteUser(userIdx) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const deleteUserQuery = `
+                UPDATE User
+                SET userStatus = 'N'
+                WHERE userId = ?;
+    `;
+  let deleteUserParams = [userIdx];
+  const deleteUserRow = await connection.query(
+    deleteUserQuery,
+    deleteUserParams
+  );
+  connection.release();
+  return [deleteUserRow];
 }
 
 // 사용자 관심목록 조회
@@ -162,31 +224,68 @@ async function selectUserBlock(userIdx) {
   return blockRows;
 }
 
-// 차단 사용자 추가
-async function insertUserBlock(userIdx) {
+// 차단 사용자인지 여부 조회
+async function selectBlockStatus(targetUserIdx) {
   const connection = await pool.getConnection(async (conn) => conn);
-  const selectUserBlockQuery = `
-        select User.userId as userIdx, User.profileImageUrl,User.userName
-        from Block inner join User 
-        on Block.targetUserId = User.userId where Block.userId = ?
+  const targetUserIdxQuery = `
+          select blockStatus from Block where targetUserId = ?;
                 `;
-  const selectUserBlockParams = [userIdx];
-  const [blockRows] = await connection.query(
-    selectUserBlockQuery,
-    selectUserBlockParams
+  const targetUserIdxParams = [targetUserIdx];
+  const [blockStatus] = await connection.query(
+    targetUserIdxQuery,
+    targetUserIdxParams
   );
   connection.release();
 
-  return blockRows;
+  return blockStatus;
+}
+
+// 차단 사용자 추가
+async function insertUserBlock(userIdx, targetUserIdx) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const insertUserBlockQuery = `
+  INSERT INTO Block (userId, targetUserId)
+  VALUES(?, ?)
+  `;
+  const insertUserBlockParams = [userIdx, targetUserIdx];
+  const [insertUserBlockRows] = await connection.query(
+    insertUserBlockQuery,
+    insertUserBlockParams
+  );
+  connection.release();
+  return insertUserBlockRows;
+}
+
+// 차단 사용자 상태 변경
+async function deleteUserBlock(userIdx, targetUserIdx) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const deleteUserBlockQuery = `
+  UPDATE Block 
+  SET blockStatus = if(blockStatus = 'Y', 'N', 'Y')
+  WHERE userId = ? and targetUserId = ?;
+  `;
+  const deleteUserBlockParams = [userIdx, targetUserIdx];
+  const [deleteUserBlockRows] = await connection.query(
+    deleteUserBlockQuery,
+    deleteUserBlockParams
+  );
+  connection.release();
+
+  return deleteUserBlockRows;
 }
 
 module.exports = {
   userEmailCheck,
-  userNicknameCheck,
+  userNameCheck,
+  phoneNumberCheck,
   insertUserInfo,
+  deleteUser,
   selectUserInfo,
+  updateUserInfo,
   selectUserProfile,
   selectUserLike,
   selectUserBlock,
+  selectBlockStatus,
   insertUserBlock,
+  deleteUserBlock,
 };

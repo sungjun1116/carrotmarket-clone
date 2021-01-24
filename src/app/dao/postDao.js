@@ -463,7 +463,7 @@ async function insertLikeArticle(userIdx, postIdx) {
   return insertLikeArticleRows;
 }
 
-// 관심목록 헤제
+// 관심목록 상태 변경
 async function deletelikeArticle(userIdx, postIdx) {
   const connection = await pool.getConnection(async (conn) => conn);
   const deletelikeArticleQuery = `

@@ -4,9 +4,9 @@ const { pool } = require("../../../config/database");
 async function selectCategory(userId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectCategoryQuery = `
-                SELECT LikeCategory.categoryId, categoryName
+                SELECT LikeCategory.categoryId as categoryIdx, categoryName
                 FROM LikeCategory inner join Category on LikeCategory.categoryid = Category.categoryId
-                WHERE LikeCategory.userId = ? and likeStatus = 1;
+                WHERE LikeCategory.userId = ?;
                 `;
   const selectCategoryParams = [userId];
   const [likecategoryRows] = await connection.query(
@@ -19,7 +19,7 @@ async function selectCategory(userId) {
 }
 
 // categoryCheck
-async function categoryCheck(userId, categoryId) {
+async function selectCategoryStatus(userId, categoryId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectCategoryQuery = `
                 SELECT likeStatus
@@ -27,13 +27,13 @@ async function categoryCheck(userId, categoryId) {
                 WHERE userId = ? and categoryId = ?;
                 `;
   const selectCategoryParams = [userId, categoryId];
-  const [categoryRows] = await connection.query(
+  const [categoryStatus] = await connection.query(
     selectCategoryQuery,
     selectCategoryParams
   );
   connection.release();
 
-  return categoryRows;
+  return categoryStatus;
 }
 
 // insertCategory
@@ -52,29 +52,12 @@ async function insertCategory(userId, categoryId) {
   return insertCategoryRow;
 }
 
-// updateCategory
-async function updateCategory(userId, categoryId) {
-  const connection = await pool.getConnection(async (conn) => conn);
-  const updateCategoryQuery = `
-        UPDATE LikeCategory
-        SET likeStatus = 1
-        WHERE userId = ? and categoryId = ?;
-    `;
-  const updateCategoryParams = [userId, categoryId];
-  const updateCategoryRow = await connection.query(
-    updateCategoryQuery,
-    updateCategoryParams
-  );
-  connection.release();
-  return updateCategoryRow;
-}
-
-// deleteCategory
+// updatecategory
 async function deleteCategory(userId, categoryId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const deleteCategoryQuery = `
         UPDATE LikeCategory
-        SET likeStatus = 0
+        SET likeStatus = if(likeStatus = 1, 0, 1)
         WHERE userId = ? and categoryId = ?;
     `;
   const deleteCategoryParams = [userId, categoryId];
@@ -88,8 +71,7 @@ async function deleteCategory(userId, categoryId) {
 
 module.exports = {
   selectCategory,
-  categoryCheck,
+  selectCategoryStatus,
   insertCategory,
-  updateCategory,
   deleteCategory,
 };

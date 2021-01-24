@@ -3,6 +3,5 @@ module.exports = function (app) {
   const jwtMiddleware = require("../../../config/jwtMiddleware");
 
   app.get("/category", jwtMiddleware, category.selectCategory);
-  app.post("/category", jwtMiddleware, category.addCategory);
-  app.delete("/category/:categoryIdx", jwtMiddleware, category.deleteCategory);
+  app.patch("/category/:categoryIdx", jwtMiddleware, category.changeCategory);
 };
