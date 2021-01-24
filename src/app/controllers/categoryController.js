@@ -31,17 +31,18 @@ exports.selectCategory = async function (req, res) {
 // 관심 카테고리 추가
 exports.addCategory = async function (req, res) {
   const { id } = req.verifiedToken;
-  const { categoryId } = req.body;
-  const categoryRow = await categoryDao.categoryCheck(id, categoryId);
+  const { categoryIdx } = req.body;
+  const categoryRow = await categoryDao.categoryCheck(id, categoryIdx);
 
   try {
     if (categoryRow.length < 1) {
       const insertCategoryRow = await categoryDao.insertCategory(
         id,
-        categoryId
+        categoryIdx
       );
       if (insertCategoryRow.length > 0) {
         return res.json({
+          categoryIdx: insertCategoryRow.insertId,
           isSuccess: true,
           code: 200,
           message: "추가 됐습니다.",
@@ -50,7 +51,7 @@ exports.addCategory = async function (req, res) {
     } else if (categoryRow[0].likeStatus === 0) {
       const updateCategoryRow = await categoryDao.updateCategory(
         id,
-        categoryId
+        categoryIdx
       );
       if (updateCategoryRow.length > 0) {
         return res.json({
@@ -75,8 +76,8 @@ exports.addCategory = async function (req, res) {
 // 관심 카테고리 헤제
 exports.deleteCategory = async function (req, res) {
   const { id } = req.verifiedToken;
-  const { categoryId } = req.body;
-  const categoryRow = await categoryDao.categoryCheck(id, categoryId);
+  const { categoryIdx } = req.params;
+  const categoryRow = await categoryDao.categoryCheck(id, categoryIdx);
 
   try {
     if (categoryRow.length < 1) {
@@ -88,7 +89,7 @@ exports.deleteCategory = async function (req, res) {
     } else {
       const deleteCategoryRow = await categoryDao.deleteCategory(
         id,
-        categoryId
+        categoryIdx
       );
       return res.json({
         isSuccess: true,

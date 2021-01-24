@@ -3,7 +3,7 @@ const { pool } = require("../../../config/database");
 // 접속한 user의 동네기반 위치 정보 확인
 async function selectUserLocation(userId) {
   const connection = await pool.getConnection(async (conn) => conn);
-  const selectUserLocationQuery = `select location, latitude, longitude, nearbyPost from Location where userId = ? and locationOrder = 'first';`;
+  const selectUserLocationQuery = `select locationId, location, latitude, longitude, nearbyPost from Location where userId = ? and locationOrder = 'first';`;
   const selectUserLocationParams = [userId];
   const [userLocationRows] = await connection.query(
     selectUserLocationQuery,
@@ -19,8 +19,8 @@ async function selectPost(userId, userLocationRows) {
   const connection = await pool.getConnection(async (conn) => conn);
   const { location, latitude, longitude, nearbyPost } = userLocationRows[0];
   const selectPostQuery = `
-  select Post.postId              as postNo,
-  Post.postImageUrl,
+  select Post.postId              as postIdx,
+  firstImageUrl as postImageUrl,
   postName,
   if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
      SUBSTRING_INDEX(location, ' ', -1), location)
@@ -59,9 +59,17 @@ from Post
                                                 + sin(radians(?)) *
                                                   sin(radians(latitude)))) AS distance
                                      from Location
+                                     where locationOrder = 'first'
                                      having distance < ?) UserLocation
                                     on User.userId = UserLocation.userId) UserLocationTable
                on Post.sellerId = UserLocationTable.userId
+    inner join (select PostImage.postId, imageurl as firstImageUrl
+    from PostImage
+              inner join (select postId, min(imageNo) as firstImageNo
+                          from PostImage
+                          group by postId) firstImage
+                        on PostImage.imageNO = firstImage.firstImageNo) PostImages
+    on Post.postId = PostImages.postId
     left outer join (select postId, count(*) as favoriteCount from Favorite group by postId) FavoriteCount
                     on Post.postId = FavoriteCount.postId
     left outer join (select postId, count(*) as chatCount from Room group by postId) ChatCount
@@ -103,8 +111,8 @@ async function selectKeywordPost(
     showCompleted = "2";
   }
   const selectKeywordQuery = `
-  select Post.postId              as postNo,
-  Post.postImageUrl,
+  select Post.postId              as postIdx,
+  firstImageUrl                   as postImageUrl,
   postName,
   if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
      SUBSTRING_INDEX(location, ' ', -1), location)
@@ -146,6 +154,13 @@ from Post
                                      having distance < ?) UserLocation
                                     on User.userId = UserLocation.userId) UserLocationTable
                on Post.sellerId = UserLocationTable.userId
+    inner join (select PostImage.postId, imageurl as firstImageUrl
+    from PostImage
+              inner join (select postId, min(imageNo) as firstImageNo
+                          from PostImage
+                          group by postId) firstImage
+                        on PostImage.imageNO = firstImage.firstImageNo) PostImages
+    on Post.postId = PostImages.postId
     left outer join (select postId, count(*) as favoriteCount from Favorite group by postId) FavoriteCount
                     on Post.postId = FavoriteCount.postId
     left outer join (select postId, count(*) as chatCount from Room group by postId) ChatCount
@@ -178,7 +193,8 @@ async function selectArticleInfo(postId, userLocationRows) {
   const connection = await pool.getConnection(async (conn) => conn);
   const { location } = userLocationRows[0];
   const selectArticleInfoQuery = `
-  select Post.postId ,
+  select Post.postId as postIdx,
+       sellerId,
        if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
           SUBSTRING_INDEX(location, ' ', -1), location)
                                 as postLocation,
@@ -208,7 +224,8 @@ async function selectArticleInfo(postId, userLocationRows) {
                                 as postPrice,
        IFNULL(chatCount, 0)     as chatCount,
        IFNULL(favoriteCount, 0) as favoriteCount,
-       IFNULL(viewCount, 0)     as viewCount
+       IFNULL(viewCount, 0)     as viewCount,
+       priceNegoPossible
 from Post
          inner join (select User.userId, location, locationId, ratingScore
                      from User
@@ -237,9 +254,247 @@ where Post.postId = ?;
   return articleInfoRows;
 }
 
+// 상품 상세이미지 조회
+async function selectArticleImages(postId) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const selectArticleImagesQuery = `
+  select imageNo, imageUrl from PostImage where postId = ?;
+`;
+  const selectArticleImagesParams = [postId];
+  const [articleImagesRows] = await connection.query(
+    selectArticleImagesQuery,
+    selectArticleImagesParams
+  );
+  connection.release();
+
+  return articleImagesRows;
+}
+
+// 사용자 상품 좋아요 여부
+async function selectLikeStatus(userId, postId) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const selectLikeStatusQuery = `
+  select favoriteStatus from Favorite where userId = ? and PostId = ?;
+`;
+  const selectLikeStatusParams = [userId, postId];
+  const [LikeStatusRows] = await connection.query(
+    selectLikeStatusQuery,
+    selectLikeStatusParams
+  );
+  connection.release();
+
+  return LikeStatusRows;
+}
+
+// 상품 게시글 등록
+async function insertArticle(
+  userId,
+  postName,
+  categoryIdx,
+  price,
+  priceNegoPossible,
+  contents,
+  postShowArea,
+  userLocationRows
+) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const { locationId } = userLocationRows[0];
+  price === undefined ? (price = 0) : (price = price);
+  const insertArticleQuery = `
+  INSERT INTO Post (sellerId, postName, categoryId, locationId, price, contents, postShowArea, priceNegoPossible) 
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+`;
+  const insertArticleParams = [
+    userId,
+    postName,
+    categoryIdx,
+    locationId,
+    price,
+    contents,
+    postShowArea,
+    priceNegoPossible,
+  ];
+  const [articleRows] = await connection.query(
+    insertArticleQuery,
+    insertArticleParams
+  );
+  connection.release();
+
+  return articleRows;
+}
+
+// 상품 이미지 등록
+async function insertPostImage(postId, imageUrl) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const insertPostImageQuery = `
+  INSERT INTO PostImage (postId, imageUrl) 
+  VALUES (?, ?);
+`;
+  const insertPostImageParams = [postId, imageUrl];
+  const [postImageRows] = await connection.query(
+    insertPostImageQuery,
+    insertPostImageParams
+  );
+  connection.release();
+
+  return postImageRows;
+}
+
+// 상품 판매글 수정
+async function editArticle(
+  postName,
+  categoryIdx,
+  price,
+  priceNegoPossible,
+  contents,
+  postShowArea,
+  postIdx,
+  userLocationRows
+) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const { locationId } = userLocationRows[0];
+  price === undefined ? (price = 0) : (price = price);
+  const editArticleQuery = `
+  UPDATE Post
+  SET postName = ?, categoryId = ?, locationId = ?, price = ?, contents = ?, postShowArea = ?, priceNegoPossible = ? 
+  WHERE postId = ?;
+`;
+  const editArticleParams = [
+    postName,
+    categoryIdx,
+    locationId,
+    price,
+    contents,
+    postShowArea,
+    priceNegoPossible,
+    postIdx,
+  ];
+  const [editArticleRows] = await connection.query(
+    editArticleQuery,
+    editArticleParams
+  );
+  connection.release();
+
+  return editArticleRows;
+}
+
+// 상품 이미지 수정
+async function editPostImage(imageIdx, imageUrl) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const editPostImageQuery = `
+  UPDATE PostImage
+  SET imageUrl = ?
+  WHERE ImageNo = ?;
+`;
+  const editPostImageParams = [imageUrl, imageIdx];
+  const [editPostImageRows] = await connection.query(
+    editPostImageQuery,
+    editPostImageParams
+  );
+  connection.release();
+
+  return editPostImageRows;
+}
+
+// 상품 판매글 삭제
+async function deleteArticle(postId) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const deletePostQuery = `
+  UPDATE Post
+  SET postStatus = 3;
+  `;
+  const deleteArticleParams = [postId];
+  const [deleteArticleRows] = await connection.query(
+    deletePostQuery,
+    deleteArticleParams
+  );
+  connection.release();
+
+  return deleteArticleRows;
+}
+
+// 상품 예약중으로 변경
+async function updateReserved(postIdx) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const updateReservedQuery = `
+  UPDATE Post
+  SET postStatus = 1
+  WHERE postId = ?;
+  `;
+  const updateReservedParams = [postIdx];
+  const [updateReservedRows] = await connection.query(
+    updateReservedQuery,
+    updateReservedParams
+  );
+  connection.release();
+  return updateReservedRows;
+}
+
+// 상품 판매완료로 변경
+async function updateCompleted(postIdx) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const updateCompletedQuery = `
+  UPDATE Post
+  SET postStatus = 2
+  WHERE postId = ?;
+  `;
+  const updateCompletedParams = [postIdx];
+  const [updateCompletedRows] = await connection.query(
+    updateCompletedQuery,
+    updateCompletedParams
+  );
+  connection.release();
+  return updateCompletedRows;
+}
+
+// 관심목록 추가
+async function insertLikeArticle(userIdx, postIdx) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const insertLikeArticleQuery = `
+  INSERT INTO Favorite (userId, postId) 
+  VALUES (?, ?);
+  `;
+  const insertLikeArticleParams = [userIdx, postIdx];
+  const [insertLikeArticleRows] = await connection.query(
+    insertLikeArticleQuery,
+    insertLikeArticleParams
+  );
+  connection.release();
+  return insertLikeArticleRows;
+}
+
+// 관심목록 헤제
+async function deletelikeArticle(userIdx, postIdx) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const deletelikeArticleQuery = `
+  UPDATE Favorite 
+  SET favoriteStatus = if(favoriteStatus = 'Y', 'N', 'Y')
+  WHERE userId = ? and postId = ?;
+  `;
+  const deletelikeArticleParams = [userIdx, postIdx];
+  const [deletelikeArticleRows] = await connection.query(
+    deletelikeArticleQuery,
+    deletelikeArticleParams
+  );
+  connection.release();
+
+  return deletelikeArticleRows;
+}
+
 module.exports = {
   selectUserLocation,
   selectPost,
   selectKeywordPost,
   selectArticleInfo,
+  selectArticleImages,
+  selectLikeStatus,
+  insertArticle,
+  insertPostImage,
+  editArticle,
+  editPostImage,
+  deleteArticle,
+  updateReserved,
+  updateCompleted,
+  insertLikeArticle,
+  deletelikeArticle,
 };
