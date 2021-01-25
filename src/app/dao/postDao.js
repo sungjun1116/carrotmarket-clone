@@ -242,7 +242,7 @@ from Post
                          on Post.postId = ChatCount.postId
          left outer join (select postId, count(*) as viewCount from View group by postId) viewCount
                          on Post.postId = viewCount.postId
-where Post.postId = ? Post.postStatus != 3;
+where Post.postId = ? and Post.postStatus != 3;
 `;
   const selectArticleInfoParams = [location, postId];
   const [articleInfoRows] = await connection.query(

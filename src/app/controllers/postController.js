@@ -106,10 +106,10 @@ exports.selectArticleInfo = async function (req, res) {
         message: "postIdx에 조회할 상품 상세정보가 없습니다.",
       });
     }
+    console.log(articleInfoRows);
 
     // 사용자 상품에 대한 관심상품 등록 여부
     const LikeStatusRows = await postDao.selectLikeStatus(id, postId);
-    console.log(LikeStatusRows);
     if (LikeStatusRows.length === 0 || LikeStatusRows[0].LikeStatus === 0) {
       articleInfoRows[0].LikeStatus = false;
     } else {
@@ -290,6 +290,14 @@ exports.deletePost = async function (req, res) {
     postIdx,
     userLocationRows
   );
+  if (articleInfoRows.length === 0) {
+    return res.json({
+      isSuccess: false,
+      code: 431,
+      message: "postIdx에 상품이 존재하지 않습니다.",
+    });
+  }
+
   if (articleInfoRows[0].sellerId !== id) {
     return res.json({
       isSuccess: false,
