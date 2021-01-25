@@ -242,7 +242,7 @@ from Post
                          on Post.postId = ChatCount.postId
          left outer join (select postId, count(*) as viewCount from View group by postId) viewCount
                          on Post.postId = viewCount.postId
-where Post.postId = ?;
+where Post.postId = ? Post.postStatus != 3;
 `;
   const selectArticleInfoParams = [location, postId];
   const [articleInfoRows] = await connection.query(
@@ -401,7 +401,8 @@ async function deleteArticle(postId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const deletePostQuery = `
   UPDATE Post
-  SET postStatus = 3;
+  SET postStatus = 3 
+  WHERE postId = ?;
   `;
   const deleteArticleParams = [postId];
   const [deleteArticleRows] = await connection.query(
