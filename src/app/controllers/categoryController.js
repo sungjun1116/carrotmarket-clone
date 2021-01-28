@@ -6,15 +6,21 @@ const categoryDao = require("../dao/categoryDao");
 // 관심 카테고리 조회
 exports.selectCategory = async function (req, res) {
   const { id } = req.verifiedToken;
+  const { userId } = req.params;
+
+  if (id != userId) {
+    return res.json({
+      isSucess: false,
+      code: 411,
+      message: "권한이 없습니다.",
+    });
+  }
 
   try {
     let likecategoryRows = await categoryDao.selectCategory(id);
     let categoryRows = ``;
     for (let i = 0; i < likecategoryRows.length; i++) {
-      categoryRows = await categoryDao.selectCategoryStatus(
-        id,
-        likecategoryRows[i].categoryIdx
-      );
+      categoryRows = await categoryDao.selectCategoryStatus(id, likecategoryRows[i].categoryId);
       likecategoryRows[i].likeStatus = categoryRows[0].likeStatus;
     }
     if (likecategoryRows.length > 0) {
@@ -39,36 +45,44 @@ exports.selectCategory = async function (req, res) {
 // 관심 카테고리 추가, 헤제
 exports.changeCategory = async function (req, res) {
   const { id } = req.verifiedToken;
-  const { categoryIdx } = req.params;
+  const { userId, categoryId } = req.params;
+
+  const conn = await pool.getConnection();
+
+  if (id != userId) {
+    return res.json({
+      isSucess: false,
+      code: 411,
+      message: "권한이 없습니다.",
+    });
+  }
 
   try {
-    const deleteCategoryRow = await categoryDao.deleteCategory(id, categoryIdx);
+    await conn.beginTransaction();
+
+    const deleteCategoryRow = await categoryDao.deleteCategory(id, categoryId);
     if (deleteCategoryRow.affectedRows === 0) {
-      const insertCategoryRow = await categoryDao.insertCategory(
-        id,
-        categoryIdx
-      );
+      const insertCategoryRow = await categoryDao.insertCategory(id, categoryId);
       if (insertCategoryRow.length === 0) {
         return res.json({
           isSuccess: false,
-          code: 411,
-          message: "잘못된 categoryIdx입니다.",
+          code: 400,
+          message: "관심카테고리 변경 실패",
         });
       }
     }
 
-    const categoryStatus = await categoryDao.selectCategoryStatus(
-      id,
-      categoryIdx
-    );
+    const categoryStatus = await categoryDao.selectCategoryStatus(id, categoryId);
     console.log(categoryStatus);
     if (categoryStatus[0].likeStatus === 1) {
+      await conn.commit();
       return res.json({
         isSuccess: true,
         code: 200,
         message: "관심 카테고리 추가 성공",
       });
     } else {
+      await conn.commit();
       return res.json({
         isSuccess: true,
         code: 201,
@@ -76,7 +90,10 @@ exports.changeCategory = async function (req, res) {
       });
     }
   } catch (err) {
+    await conn.rollback();
     logger.error(`App - changeCategory Query error\n: ${err.message}`);
     return res.status(500).send(`Error: ${err.message}`);
+  } finally {
+    conn.release();
   }
 };

@@ -7,7 +7,5 @@ module.exports = function (app) {
   app.get("/posts/:postId", jwtMiddleware, post.selectArticleInfo);
   app.patch("/posts/:postId", jwtMiddleware, post.editPost);
   app.delete("/posts/:postId", jwtMiddleware, post.deletePost);
-  app.patch("/posts/:postId/reserved", jwtMiddleware, post.updateReserved);
-  app.patch("/posts/:posId/completed", jwtMiddleware, post.updateCompleted);
-  app.patch("/posts/:postId/like", jwtMiddleware, post.likePost);
+  app.patch("/posts/:postId/status", jwtMiddleware, post.updateStatus);
 };

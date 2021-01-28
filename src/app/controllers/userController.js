@@ -389,13 +389,15 @@ exports.profile = async function (req, res) {
 
 // 06.like API = 유저 관심목록 조회
 exports.like = async function (req, res) {
-  const { id } = req.verifiedToken;
-  const userLocationRows = await postDao.selectUserLocation(id);
-  if (userLocationRows.length === 0) {
+  const { id, location } = req.verifiedToken;
+  const { userId } = req.params;
+  const userLocationRows = [{ location }];
+
+  if (id != userId) {
     return res.json({
-      isSuccess: false,
+      isSucess: false,
       code: 411,
-      message: "사용자의 위치정보가 없습니다.",
+      message: "권한이 없습니다.",
     });
   }
 
@@ -404,17 +406,17 @@ exports.like = async function (req, res) {
     console.log(userLikeRows);
     if (userLikeRows.length === 0) {
       return res.json({
-        data: [],
         isSucess: false,
         code: 412,
-        message: "userid에 관심목록이 존재하지 않습니다.",
+        message: "사용자의 관심목록이 존재하지 않습니다.",
+        result: [],
       });
     }
 
     // 사용자 상품에 대한 관심상품 헤제 여부
     for (let i = 0; i < userLikeRows.length; i++) {
-      let postIdx = userLikeRows[i].postIdx;
-      const LikeStatusRows = await postDao.selectLikeStatus(id, postIdx);
+      let postId = userLikeRows[i].postId;
+      const LikeStatusRows = await postDao.selectLikeStatus(id, postId);
       if (LikeStatusRows.length === 0 || LikeStatusRows[0].LikeStatus === 0) {
         userLikeRows[i].LikeStatus = false;
       } else {
@@ -423,10 +425,10 @@ exports.like = async function (req, res) {
     }
 
     return res.json({
-      liked: userLikeRows,
       isSuccess: true,
       code: 200,
       message: "사용자 관심목록 조회 성공",
+      result: userLikeRows,
     });
   } catch (err) {
     logger.error(`App - like Query error\n: ${err.message}`);
@@ -434,23 +436,80 @@ exports.like = async function (req, res) {
   }
 };
 
-// 07.block API = 차단 사용자목록 조회
+// 07. likePost API = 상품 판매글 관심상품 등록/헤제
+exports.likePost = async function (req, res) {
+  const { id } = req.verifiedToken;
+  const { postId } = req.params;
+
+  const conn = await pool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const deletelikeArticleRows = await postDao.deletelikeArticle(id, postId);
+    if (deletelikeArticleRows.affectedRows === 0) {
+      const insertLikeArticleRows = await postDao.insertLikeArticle(id, postId);
+      if (insertLikeArticleRows.length === 0) {
+        return res.json({
+          isSuccess: false,
+          code: 400,
+          message: "관심상품 변경 실패",
+        });
+      }
+    }
+
+    const likeStatus = await postDao.selectLikeStatus(id, postId);
+    if (likeStatus[0].favoriteStatus === "Y") {
+      await conn.commit();
+      return res.json({
+        isSuccess: true,
+        code: 200,
+        message: "관심상품 추가 성공",
+      });
+    } else {
+      await conn.commit();
+      return res.json({
+        isSuccess: true,
+        code: 201,
+        message: "관심상품 헤제 성공",
+      });
+    }
+  } catch (err) {
+    await conn.rollback();
+    logger.error(`App - likePost Query error\n: ${err.message}`);
+    return res.status(500).send(`Error: ${err.message}`);
+  } finally {
+    conn.release();
+  }
+};
+
+// 08.block API = 차단 사용자목록 조회
 exports.block = async function (req, res) {
   const { id } = req.verifiedToken;
+  const { userId } = req.params;
+
+  if (id != userId) {
+    return res.json({
+      isSucess: false,
+      code: 411,
+      message: "권한이 없습니다.",
+    });
+  }
+
   try {
     const blockRows = await userDao.selectUserBlock(id);
     if (blockRows.length === 0) {
       return res.json({
         isSuccess: false,
-        code: 400,
+        code: 412,
         message: "userid에 조회할 차단 사용자가 없습니다.",
       });
     }
     return res.json({
-      blocked: blockRows,
       isSuccess: true,
       code: 200,
-      message: "차단 사용자목록 조회 성공",
+      message: "차단사용자목록 조회 성공",
+      result: blockRows,
     });
   } catch (err) {
     logger.error(`App - block Query error\n: ${err.message}`);
@@ -458,32 +517,46 @@ exports.block = async function (req, res) {
   }
 };
 
-// 08.changeBlock API = 차단 사용자 추가, 헤제
+// 09.changeBlock API = 차단 사용자 추가, 헤제
 exports.changeBlock = async function (req, res) {
   const { id } = req.verifiedToken;
-  const { targetUserIdx } = req.body;
+  const { userId, targetId } = req.params;
+
+  const conn = await pool.getConnection();
+
+  if (id != userId) {
+    return res.json({
+      isSucess: false,
+      code: 411,
+      message: "권한이 없습니다.",
+    });
+  }
 
   try {
-    const deleteUserBlockRows = await userDao.deleteUserBlock(id, targetUserIdx);
+    await conn.beginTransaction();
+
+    const deleteUserBlockRows = await userDao.deleteUserBlock(id, targetId);
     if (deleteUserBlockRows.affectedRows === 0) {
-      const insertUserBlockRows = await userDao.insertUserBlock(id, targetUserIdx);
+      const insertUserBlockRows = await userDao.insertUserBlock(id, targetId);
       if (insertUserBlockRows.length === 0) {
         return res.json({
           isSuccess: false,
-          code: 411,
-          message: "잘못된 targetUserIdx입니다.",
+          code: 400,
+          message: "차단 사용자 변경 실패",
         });
       }
     }
 
-    const blocktatus = await userDao.selectBlockStatus(targetUserIdx);
+    const blocktatus = await userDao.selectBlockStatus(targetId);
     if (blocktatus[0].blockStatus === "Y") {
+      await conn.commit();
       return res.json({
         isSuccess: true,
         code: 200,
         message: "차단 사용자 추가 성공",
       });
     } else {
+      await conn.commit();
       return res.json({
         isSuccess: true,
         code: 201,
@@ -491,7 +564,10 @@ exports.changeBlock = async function (req, res) {
       });
     }
   } catch (err) {
+    await conn.rollback();
     logger.error(`App - addBlock Query error\n: ${err.message}`);
     return res.status(500).send(`Error: ${err.message}`);
+  } finally {
+    conn.release();
   }
 };

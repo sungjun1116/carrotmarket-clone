@@ -334,7 +334,6 @@ exports.editPost = async function (req, res) {
         message: "postId에 상품이 존재하지 않습니다.",
       });
     }
-    // adfadfad
 
     if (articleInfoRows[0].sellerId !== id) {
       return res.json({
@@ -453,130 +452,77 @@ exports.deletePost = async function (req, res) {
       message: "상품 판매글 삭제 성공",
     });
   } catch (err) {
-    logger.error(`App - deletePost Query error\n: ${err.message}`);
-    return res.status(500).send(`Error: ${err.message}`);
-  }
-};
-
-// 06. updateReserved API = 상품 예약중으로 변경
-exports.updateReserved = async function (req, res) {
-  const { id } = req.verifiedToken;
-  const { postIdx } = req.params;
-  const userLocationRows = await postDao.selectUserLocation(id);
-  if (userLocationRows.length === 0) {
-    return res.json({
-      isSuccess: false,
-      code: 411,
-      message: "사용자의 위치정보가 없습니다.",
-    });
-  }
-  try {
-    const articleInfoRows = await postDao.selectArticleInfo(postIdx, userLocationRows);
-    if (articleInfoRows[0].sellerId !== id) {
-      return res.json({
-        isSuccess: false,
-        code: 412,
-        message: "userIdx에 권한이 없습니다.",
-      });
-    }
-    const updateReservedRows = await postDao.updateReserved(postIdx);
-    if (updateReservedRows.affectedRows !== 0) {
-      return res.json({
-        isSuccess: true,
-        code: 200,
-        message: "상품 예약중으로 변경 성공",
-      });
-    }
-
-    return res.json({
-      isSuccess: false,
-      code: 400,
-      message: "상품 예약중으로 변경 실패",
-    });
-  } catch (err) {
     await conn.rollback();
-    logger.error(`App - updateReserved Query error\n: ${err.message}`);
+    logger.error(`App - deletePost Query error\n: ${err.message}`);
     return res.status(500).send(`Error: ${err.message}`);
   } finally {
     conn.release();
   }
 };
 
-// 07. updateCompleted API = 상품 판매완료로 변경
-exports.updateCompleted = async function (req, res) {
-  const { id } = req.verifiedToken;
-  const { postIdx } = req.params;
-  const userLocationRows = await postDao.selectUserLocation(id);
-  if (userLocationRows.length === 0) {
-    return res.json({
-      isSuccess: false,
-      code: 411,
-      message: "사용자의 위치정보가 없습니다.",
-    });
-  }
+// 06. updateStatus API = 상품 예약중으로 변경
+exports.updateStatus = async function (req, res) {
+  const { id, location } = req.verifiedToken;
+  const { postId } = req.params;
+  const { status } = req.body;
+  const userLocationRows = [{ location }];
+
   try {
-    const articleInfoRows = await postDao.selectArticleInfo(postIdx, userLocationRows);
+    const articleInfoRows = await postDao.selectArticleInfo(postId, userLocationRows);
+    console.log(articleInfoRows);
     if (articleInfoRows[0].sellerId !== id) {
       return res.json({
         isSuccess: false,
-        code: 412,
-        message: "userIdx에 권한이 없습니다.",
+        code: 411,
+        message: "권한이 없습니다.",
       });
     }
-    const updateCompletedRows = await postDao.updateCompleted(postIdx);
-    if (updateCompletedRows.affectedRows !== 0) {
+
+    if (!status) {
       return res.json({
-        isSuccess: true,
-        code: 200,
-        message: "상품 판매완료로 변경 성공",
+        isSuccess: false,
+        code: 412,
+        message: "stauts를 입력하세요.",
       });
     }
 
-    return res.json({
-      isSuccess: false,
-      code: 400,
-      message: "상품 판매완료로 변경 실패",
-    });
-  } catch (err) {
-    logger.error(`App - updateCompleted Query error\n: ${err.message}`);
-    return res.status(500).send(`Error: ${err.message}`);
-  }
-};
-
-// 08. likePost API = 상품 판매글 관심상품 등록/헤제
-exports.likePost = async function (req, res) {
-  const { id } = req.verifiedToken;
-  const { postIdx } = req.params;
-
-  try {
-    const deletelikeArticleRows = await postDao.deletelikeArticle(id, postIdx);
-    if (deletelikeArticleRows.affectedRows === 0) {
-      const insertLikeArticleRows = await postDao.insertLikeArticle(id, postIdx);
-      if (insertLikeArticleRows.length === 0) {
+    if (status === "reserved") {
+      const updateReservedRows = await postDao.updateReserved(postId);
+      if (updateReservedRows.affectedRows !== 0) {
         return res.json({
-          isSuccess: false,
-          code: 411,
-          message: "잘못된 postIdx입니다.",
+          isSuccess: true,
+          code: 200,
+          message: "상품 예약중으로 변경 성공",
         });
       }
-    }
-
-    const likeStatus = await postDao.selectLikeStatus(id, postIdx);
-    if (likeStatus[0].favoriteStatus === "Y") {
       return res.json({
-        isSuccess: true,
-        code: 200,
-        message: "관심상품 추가 성공",
+        isSuccess: false,
+        code: 400,
+        message: "상품 예약중으로 변경 실패",
+      });
+    } else if (status === "completed") {
+      const updateCompletedRows = await postDao.updateCompleted(postId);
+      if (updateCompletedRows.affectedRows !== 0) {
+        return res.json({
+          isSuccess: true,
+          code: 201,
+          message: "상품 판매완료로 변경 성공",
+        });
+      }
+      return res.json({
+        isSuccess: false,
+        code: 401,
+        message: "상품 판매완료로 변경 실패",
       });
     } else {
       return res.json({
-        isSuccess: true,
-        code: 201,
-        message: "관심상품 헤제 성공",
+        isSuccess: false,
+        code: 413,
+        message: 'status는 "reserved" 혹은 "completed"로 입력하세요.',
       });
     }
   } catch (err) {
-    logger.error(`App - likePost Query error\n: ${err.message}`);
+    logger.error(`App - updateStatus Query error\n: ${err.message}`);
     return res.status(500).send(`Error: ${err.message}`);
   }
 };

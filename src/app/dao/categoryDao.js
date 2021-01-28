@@ -4,15 +4,12 @@ const { pool } = require("../../../config/database");
 async function selectCategory(userId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectCategoryQuery = `
-                SELECT LikeCategory.categoryId as categoryIdx, categoryName
+                SELECT LikeCategory.categoryId, categoryName
                 FROM LikeCategory inner join Category on LikeCategory.categoryid = Category.categoryId
                 WHERE LikeCategory.userId = ?;
                 `;
   const selectCategoryParams = [userId];
-  const [likecategoryRows] = await connection.query(
-    selectCategoryQuery,
-    selectCategoryParams
-  );
+  const [likecategoryRows] = await connection.query(selectCategoryQuery, selectCategoryParams);
   connection.release();
 
   return likecategoryRows;
@@ -27,10 +24,7 @@ async function selectCategoryStatus(userId, categoryId) {
                 WHERE userId = ? and categoryId = ?;
                 `;
   const selectCategoryParams = [userId, categoryId];
-  const [categoryStatus] = await connection.query(
-    selectCategoryQuery,
-    selectCategoryParams
-  );
+  const [categoryStatus] = await connection.query(selectCategoryQuery, selectCategoryParams);
   connection.release();
 
   return categoryStatus;
@@ -44,10 +38,7 @@ async function insertCategory(userId, categoryId) {
         VALUES (?, ?);
     `;
   const insertCategoryParams = [userId, categoryId];
-  const insertCategoryRow = await connection.query(
-    insertCategoryQuery,
-    insertCategoryParams
-  );
+  const insertCategoryRow = await connection.query(insertCategoryQuery, insertCategoryParams);
   connection.release();
   return insertCategoryRow;
 }
@@ -61,10 +52,7 @@ async function deleteCategory(userId, categoryId) {
         WHERE userId = ? and categoryId = ?;
     `;
   const deleteCategoryParams = [userId, categoryId];
-  const deleteCategoryRow = await connection.query(
-    deleteCategoryQuery,
-    deleteCategoryParams
-  );
+  const deleteCategoryRow = await connection.query(deleteCategoryQuery, deleteCategoryParams);
   connection.release();
   return deleteCategoryRow;
 }

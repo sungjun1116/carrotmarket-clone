@@ -115,7 +115,7 @@ async function selectUserLike(userIdx, userLocationRows) {
   const connection = await pool.getConnection(async (conn) => conn);
   const { location } = userLocationRows[0];
   const selectUserLikeQuery = `
-    select Post.postId              as postIdx,
+    select Post.postId,
     firstImageUrl            as postImageUrl,
     postName,
     if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
@@ -171,7 +171,7 @@ async function selectUserLike(userIdx, userLocationRows) {
 async function selectUserBlock(userIdx) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectUserBlockQuery = `
-        select User.userId as userIdx, User.profileImageUrl,User.userName
+        select User.userId, User.profileImageUrl,User.userName
         from Block inner join User 
         on Block.targetUserId = User.userId where Block.userId = ?
                 `;
