@@ -1,18 +1,15 @@
 const { pool } = require("../../../config/database");
 
 // Signup
-async function userEmailCheck(email, userIdx) {
+async function userEmailCheck(email) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectEmailQuery = `
                 SELECT email
                 FROM User
-                WHERE email = ? and userId != ?;
+                WHERE email = ?;
                 `;
-  const selectEmailParams = [email, userIdx];
-  const [emailRows] = await connection.query(
-    selectEmailQuery,
-    selectEmailParams
-  );
+  const selectEmailParams = [email];
+  const [emailRows] = await connection.query(selectEmailQuery, selectEmailParams);
   connection.release();
 
   return emailRows;
@@ -26,10 +23,7 @@ async function userNameCheck(userName) {
                 WHERE userName = ?;
                 `;
   const selectNicknameParams = [userName];
-  const [userNameRows] = await connection.query(
-    selectNicknameQuery,
-    selectNicknameParams
-  );
+  const [userNameRows] = await connection.query(selectNicknameQuery, selectNicknameParams);
   connection.release();
   return userNameRows;
 }
@@ -42,10 +36,7 @@ async function phoneNumberCheck(phoneNumber) {
                 WHERE phoneNumber = ?;
                 `;
   const selectphoneNumberParams = [phoneNumber];
-  const [phoneNumberRows] = await connection.query(
-    selectphoneNumberQuery,
-    selectphoneNumberParams
-  );
+  const [phoneNumberRows] = await connection.query(selectphoneNumberQuery, selectphoneNumberParams);
   connection.release();
   return phoneNumberRows;
 }
@@ -56,10 +47,7 @@ async function insertUserInfo(insertUserInfoParams) {
         INSERT INTO User(userName, profileImageUrl, phoneNumber)
         VALUES (?, ?, ?);
     `;
-  const insertUserInfoRow = await connection.query(
-    insertUserInfoQuery,
-    insertUserInfoParams
-  );
+  const insertUserInfoRow = await connection.query(insertUserInfoQuery, insertUserInfoParams);
   connection.release();
   return insertUserInfoRow;
 }
@@ -68,45 +56,27 @@ async function insertUserInfo(insertUserInfoParams) {
 async function selectUserInfo(phoneNumber) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectUserInfoQuery = `
-                SELECT userId, phoneNumber, userStatus 
-                FROM User 
-                WHERE phoneNumber = ?;
+                    select U.userId, locationId, location, latitude, longitude, nearbyPost
+                    from User U inner join Location L on U.userId = L.userId
+                    where phoneNumber = ? and locationOrder = 'first'
                 `;
 
   let selectUserInfoParams = [phoneNumber];
-  const [userInfoRows] = await connection.query(
-    selectUserInfoQuery,
-    selectUserInfoParams
-  );
+  const [userInfoRows] = await connection.query(selectUserInfoQuery, selectUserInfoParams);
   connection.release();
   return userInfoRows;
 }
 
 // 회원정보 수정
-async function updateUserInfo(
-  userName,
-  profileImageUrl,
-  phoneNumber,
-  email,
-  userIdx
-) {
+async function updateUserInfo(userName, profileImageUrl, phoneNumber, email, userIdx) {
   const connection = await pool.getConnection(async (conn) => conn);
   const updateUserInfoQuery = `
             UPDATE User
             SET userName = ?, profileImageUrl = ?, phoneNumber= ?, email= ?
             WHERE userId = ?;
                 `;
-  let updateUserInfoParams = [
-    userName,
-    profileImageUrl,
-    phoneNumber,
-    email,
-    userIdx,
-  ];
-  const [updateUserInfoRows] = await connection.query(
-    updateUserInfoQuery,
-    updateUserInfoParams
-  );
+  let updateUserInfoParams = [userName, profileImageUrl, phoneNumber, email, userIdx];
+  const [updateUserInfoRows] = await connection.query(updateUserInfoQuery, updateUserInfoParams);
   connection.release();
   return [updateUserInfoRows];
 }
@@ -115,16 +85,13 @@ async function updateUserInfo(
 async function selectUserProfile(userId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectUserProfileQuery = `
-                SELECT userId, userName, profileImageUrl, ratingScore 
+                SELECT userId, userName, profileImageUrl, ratingScore, phoneNumber, email
                 FROM User 
                 WHERE userId = ? and userStatus = 'Y';
                 `;
 
   let selectUserProfileParams = [userId];
-  const [userProfileRows] = await connection.query(
-    selectUserProfileQuery,
-    selectUserProfileParams
-  );
+  const [userProfileRows] = await connection.query(selectUserProfileQuery, selectUserProfileParams);
   connection.release();
   return userProfileRows;
 }
@@ -138,10 +105,7 @@ async function deleteUser(userIdx) {
                 WHERE userId = ?;
     `;
   let deleteUserParams = [userIdx];
-  const deleteUserRow = await connection.query(
-    deleteUserQuery,
-    deleteUserParams
-  );
+  const deleteUserRow = await connection.query(deleteUserQuery, deleteUserParams);
   connection.release();
   return [deleteUserRow];
 }
@@ -198,10 +162,7 @@ async function selectUserLike(userIdx, userLocationRows) {
   `;
 
   let selectUserLikeParams = [location, userIdx];
-  const [userLikeRows] = await connection.query(
-    selectUserLikeQuery,
-    selectUserLikeParams
-  );
+  const [userLikeRows] = await connection.query(selectUserLikeQuery, selectUserLikeParams);
   connection.release();
   return userLikeRows;
 }
@@ -215,10 +176,7 @@ async function selectUserBlock(userIdx) {
         on Block.targetUserId = User.userId where Block.userId = ?
                 `;
   const selectUserBlockParams = [userIdx];
-  const [blockRows] = await connection.query(
-    selectUserBlockQuery,
-    selectUserBlockParams
-  );
+  const [blockRows] = await connection.query(selectUserBlockQuery, selectUserBlockParams);
   connection.release();
 
   return blockRows;
@@ -231,10 +189,7 @@ async function selectBlockStatus(targetUserIdx) {
           select blockStatus from Block where targetUserId = ?;
                 `;
   const targetUserIdxParams = [targetUserIdx];
-  const [blockStatus] = await connection.query(
-    targetUserIdxQuery,
-    targetUserIdxParams
-  );
+  const [blockStatus] = await connection.query(targetUserIdxQuery, targetUserIdxParams);
   connection.release();
 
   return blockStatus;
@@ -248,10 +203,7 @@ async function insertUserBlock(userIdx, targetUserIdx) {
   VALUES(?, ?)
   `;
   const insertUserBlockParams = [userIdx, targetUserIdx];
-  const [insertUserBlockRows] = await connection.query(
-    insertUserBlockQuery,
-    insertUserBlockParams
-  );
+  const [insertUserBlockRows] = await connection.query(insertUserBlockQuery, insertUserBlockParams);
   connection.release();
   return insertUserBlockRows;
 }
@@ -265,10 +217,7 @@ async function deleteUserBlock(userIdx, targetUserIdx) {
   WHERE userId = ? and targetUserId = ?;
   `;
   const deleteUserBlockParams = [userIdx, targetUserIdx];
-  const [deleteUserBlockRows] = await connection.query(
-    deleteUserBlockQuery,
-    deleteUserBlockParams
-  );
+  const [deleteUserBlockRows] = await connection.query(deleteUserBlockQuery, deleteUserBlockParams);
   connection.release();
 
   return deleteUserBlockRows;

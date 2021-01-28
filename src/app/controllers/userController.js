@@ -15,37 +15,30 @@ const { constants } = require("buffer");
  */
 exports.signUp = async function (req, res) {
   const { userName, profileImageUrl, phoneNumber } = req.body;
-  // if (!email)
-  //   return res.json({
-  //     isSuccess: false,
-  //     code: 301,
-  //     message: "이메일을 입력해주세요.",
-  //   });
-  // if (email.length > 50)
-  //   return res.json({
-  //     isSuccess: false,
-  //     code: 302,
-  //     message: "이메일은 50자리 미만으로 입력해주세요.",
-  //   });
-
-  // if (!regexEmail.test(email))
-  //   return res.json({
-  //     isSuccess: false,
-  //     code: 303,
-  //     message: "이메일을 형식을 정확하게 입력해주세요.",
-  //   });
-
   if (!userName)
     return res.json({
       isSuccess: false,
       code: 411,
       message: "닉네임을 입력 해주세요.",
     });
-  if (userName.length > 20)
+  if (typeof userName !== "string")
     return res.json({
       isSuccess: false,
       code: 412,
-      message: "닉네임은 최대 20자리를 입력해주세요.",
+      message: "닉네임은 문자열을 입력하세요.",
+    });
+  if (!/^([a-zA-Z0-9ㄱ-ㅎ|ㅏ-ㅣ|가-힣]).{1,10}$/.test(userName))
+    return res.json({
+      isSuccess: false,
+      code: 413,
+      message: "닉네임은 한글, 영문, 숫자만 가능하며 2-10자리 가능합니다. ",
+    });
+
+  if (!/(http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?/.test(profileImageUrl))
+    return res.json({
+      isSuccess: false,
+      code: 433,
+      message: "url형식에 맞게 입력해주세요.",
     });
 
   if (!phoneNumber)
@@ -54,23 +47,20 @@ exports.signUp = async function (req, res) {
       code: 421,
       message: "전화번호를 입력 해주세요.",
     });
-  if (!phoneNumber.match(/^[0-9]{3}[-]+[0-9]{4}[-]+[0-9]{4}$/))
+  if (typeof phoneNumber !== "string") {
     return res.json({
       isSuccess: false,
       code: 422,
-      message: "전화번호는 (0xx)-xxxx-xxxx 형식으로 입력해주세요.",
+      message: "전화번호는 문자열을 입력하세요.",
+    });
+  }
+  if (!/^[0-9]{3}-[0-9]{3,4}-[0-9]{4}/.test(phoneNumber))
+    return res.json({
+      isSuccess: false,
+      code: 423,
+      message: "숫자, -을 포함해 휴대전화 형식에 맞게 입력해주세요.",
     });
   try {
-    // // 이메일 중복 확인
-    // const emailRows = await userDao.userEmailCheck(email);
-    // if (emailRows.length > 0) {
-    //   return res.json({
-    //     isSuccess: false,
-    //     code: 308,
-    //     message: "중복된 이메일입니다.",
-    //   });
-    // }
-
     // 닉네임 중복 확인
     const userNameRows = await userDao.userNameCheck(userName);
     if (userNameRows.length > 0) {
@@ -80,8 +70,7 @@ exports.signUp = async function (req, res) {
         message: "중복된 닉네임입니다.",
       });
     }
-
-    // 닉네임 중복 확인
+    // 휴대폰 번호 중복 확인
     const phoneNumberRows = await userDao.phoneNumberCheck(phoneNumber);
     if (phoneNumberRows.length > 0) {
       return res.json({
@@ -100,8 +89,10 @@ exports.signUp = async function (req, res) {
     // const insertUserInfoParams = [email, hashedPassword, nickname];
     const insertUserInfoParams = [userName, profileImageUrl, phoneNumber];
     const insertUserRows = await userDao.insertUserInfo(insertUserInfoParams);
+    console.log(insertUserRows[0].insertId);
     if (insertUserRows.length > 0) {
       return res.json({
+        userId: insertUserRows[0].insertId,
         isSuccess: true,
         code: 200,
         message: "회원가입 성공",
@@ -129,11 +120,11 @@ exports.signUp = async function (req, res) {
 exports.signIn = async function (req, res) {
   const { phoneNumber } = req.body;
 
-  if (!phoneNumber.match(/^[0-9]{3}[-]+[0-9]{4}[-]+[0-9]{4}$/))
+  if (!/^[0-9]{3}-[0-9]{3,4}-[0-9]{4}/.test(phoneNumber))
     return res.json({
       isSuccess: false,
-      code: 411,
-      message: "휴대폰 번호를 (0xx)-xxxx-xxxx 형식으로 입력해주세요.",
+      code: 422,
+      message: "숫자, -을 포함해 휴대전화 형식에 맞게 입력해주세요.",
     });
 
   try {
@@ -144,7 +135,7 @@ exports.signIn = async function (req, res) {
       return res.json({
         isSuccess: false,
         code: 400,
-        message: "로그인 실패 휴대폰 번호를 확인해주세요.",
+        message: "로그인 실패. 휴대폰 번호를 확인해주세요.",
       });
     }
 
@@ -161,6 +152,11 @@ exports.signIn = async function (req, res) {
     let token = await jwt.sign(
       {
         id: userInfoRows.userId,
+        locationId: userInfoRows.locationId,
+        location: userInfoRows.location,
+        latitude: userInfoRows.latitude,
+        longitude: userInfoRows.longitude,
+        nearbyPost: userInfoRows.nearbyPost,
       }, // 토큰의 내용(payload)
       secret_config.jwtsecret, // 비밀 키
       {
@@ -185,7 +181,7 @@ exports.signIn = async function (req, res) {
 /**
  03.check API = token 검증
  **/
-exports.check = async function (req, res) {
+exports.isValidJWT = async function (req, res) {
   res.json({
     isSuccess: true,
     code: 200,
@@ -194,80 +190,24 @@ exports.check = async function (req, res) {
   });
 };
 
-// 04.update API = 회원정보 수정
-exports.update = async function (req, res) {
-  const { id } = req.verifiedToken;
-  const { userName, profileImageUrl, phoneNumber, email } = req.body;
-  if (email) {
-    if (email.length > 50)
-      return res.json({
-        isSuccess: false,
-        code: 411,
-        message: "이메일은 50자리 미만으로 입력해주세요.",
-      });
-    if (!regexEmail.test(email))
-      return res.json({
-        isSuccess: false,
-        code: 412,
-        message: "이메일을 형식을 정확하게 입력해주세요.",
-      });
-  }
-
-  if (userName !== undefined && userName.length > 20)
-    return res.json({
-      isSuccess: false,
-      code: 421,
-      message: "닉네임은 최대 20자리를 입력해주세요.",
-    });
-
-  try {
-    const emailRows = await userDao.userEmailCheck(email, id);
-    if (emailRows.length > 0) {
-      return res.json({
-        isSuccess: false,
-        code: 422,
-        message: "중복된 이메일입니다.",
-      });
-    }
-    const updateUserInfoRows = await userDao.updateUserInfo(
-      userName,
-      profileImageUrl,
-      phoneNumber,
-      email,
-      id
-    );
-    if (updateUserInfoRows.length > 0) {
-      return res.json({
-        isSuccess: true,
-        code: 200,
-        message: "회원정보 수정 성공",
-      });
-    }
-    return res.json({
-      isSuccess: false,
-      code: 400,
-      message: "회원정보 수정 실패",
-    });
-    //  await connection.commit(); // COMMIT
-    // connection.release();
-  } catch (err) {
-    // await connection.rollback(); // ROLLBACK
-    // connection.release();
-    logger.error(`App - updateUserInfo Query error\n: ${err.message}`);
-    return res.status(500).send(`Error: ${err.message}`);
-  }
-};
-
-// 05.deleteUser API = 회원 탈퇴
+// 04.deleteUser API = 회원 탈퇴
 exports.deleteUser = async function (req, res) {
   const { id } = req.verifiedToken;
+  const { userId } = req.params;
+  if (id != userId) {
+    return res.json({
+      isSucess: false,
+      code: 411,
+      message: "권한이 없습니다.",
+    });
+  }
   try {
     const userProfileRows = await userDao.selectUserProfile(id);
     if (userProfileRows.length === 0) {
       return res.json({
         isSucess: false,
-        code: 411,
-        message: "존재하지 않는 userIdx입니다.",
+        code: 412,
+        message: "존재하지 않는 userid입니다.",
       });
     }
 
@@ -290,36 +230,160 @@ exports.deleteUser = async function (req, res) {
   }
 };
 
-// 06.profile API = 유저 프로필 조회
-exports.profile = async function (req, res) {
+// 05.update API = 회원정보 수정
+exports.update = async function (req, res) {
   const { id } = req.verifiedToken;
-  const { userIdx } = req.params;
-  if (id === Number(userIdx)) {
-    try {
-      const userProfileRows = await userDao.selectUserProfile(id);
-      if (userProfileRows.length === 0) {
-        return res.json({
-          isSucess: false,
-          code: 411,
-          message: "존재하지 않는 userIdx입니다.",
-        });
-      }
+  const { userId } = req.params;
+  let { userName, profileImageUrl, phoneNumber, email } = req.body;
+
+  if (id != userId) {
+    return res.json({
+      isSucess: false,
+      code: 411,
+      message: "권한이 없습니다.",
+    });
+  }
+
+  if (userName) {
+    if (typeof userName !== "string")
+      return res.json({
+        isSuccess: false,
+        code: 412,
+        message: "닉네임은 문자열을 입력하세요.",
+      });
+    if (!/^([a-zA-Z0-9ㄱ-ㅎ|ㅏ-ㅣ|가-힣]).{1,10}$/.test(userName))
+      return res.json({
+        isSuccess: false,
+        code: 413,
+        message: "닉네임은 한글, 영문, 숫자만 가능하며 2-10자리 가능합니다.",
+      });
+  }
+  if (profileImageUrl) {
+    if (!/(http|https):\/\/(\w+:{0,1}\w*@)?(\S+)(:[0-9]+)?(\/|\/([\w#!:.?+=&%@!\-\/]))?/.test(profileImageUrl))
+      return res.json({
+        isSuccess: false,
+        code: 421,
+        message: "url형식에 맞게 입력해주세요.",
+      });
+  }
+  if (phoneNumber) {
+    if (typeof phoneNumber !== "string") {
+      return res.json({
+        isSuccess: false,
+        code: 422,
+        message: "전화번호는 문자열을 입력하세요.",
+      });
+    }
+    if (!/^[0-9]{3}-[0-9]{3,4}-[0-9]{4}/.test(phoneNumber))
+      return res.json({
+        isSuccess: false,
+        code: 423,
+        message: "숫자, -을 포함해 휴대전화 형식에 맞게 입력해주세요.",
+      });
+  }
+  if (email) {
+    if (email.length > 50)
+      return res.json({
+        isSuccess: false,
+        code: 431,
+        message: "이메일은 50자리 미만으로 입력해주세요.",
+      });
+    if (!regexEmail.test(email))
+      return res.json({
+        isSuccess: false,
+        code: 432,
+        message: "이메일형식을 정확하게 입력해주세요.",
+      });
+  }
+
+  try {
+    // 닉네임 중복 확인
+    const userNameRows = await userDao.userNameCheck(userName);
+    console.log(userNameRows[0].userName);
+    if (userNameRows.length > 0 && userNameRows[0].userName !== userName) {
+      return res.json({
+        isSuccess: false,
+        code: 433,
+        message: "중복된 닉네임입니다.",
+      });
+    }
+    // 휴대폰번호 중복 확인
+    const phoneNumberRows = await userDao.phoneNumberCheck(phoneNumber);
+    if (phoneNumberRows.length > 0 && phoneNumberRows[0].phoneNumber !== phoneNumber) {
+      return res.json({
+        isSuccess: false,
+        code: 441,
+        message: "중복된 휴대폰번호입니다.",
+      });
+    }
+    // 이메일 중복 확인
+    const emailRows = await userDao.userEmailCheck(email, id);
+    if (emailRows.length > 0 && emailRows[0].email !== email) {
+      return res.json({
+        isSuccess: false,
+        code: 442,
+        message: "중복된 이메일입니다.",
+      });
+    }
+
+    const userProfileRows = await userDao.selectUserProfile(id);
+    userName ? (userName = userName) : (userName = userProfileRows[0].userName);
+    profileImageUrl ? (profileImageUrl = profileImageUrl) : (profileImageUrl = userProfileRows[0].profileImageUrl);
+    phoneNumber ? (phoneNumber = phoneNumber) : (phoneNumber = userProfileRows[0].phoneNumber);
+    email ? (email = email) : (email = userProfileRows[0].email);
+
+    const updateUserInfoRows = await userDao.updateUserInfo(userName, profileImageUrl, phoneNumber, email, id);
+    if (updateUserInfoRows.length > 0) {
       return res.json({
         isSuccess: true,
         code: 200,
-        message: "유저프로필 정보 검색 성공",
-        data: userProfileRows,
+        message: "회원정보 수정 성공",
       });
-    } catch (err) {
-      logger.error(`App - selectUserProfile Query error\n: ${err.message}`);
-      return res.status(500).send(`Error: ${err.message}`);
     }
-  } else {
+    return res.json({
+      isSuccess: false,
+      code: 400,
+      message: "회원정보 수정 실패",
+    });
+    //  await connection.commit(); // COMMIT
+    // connection.release();
+  } catch (err) {
+    // await connection.rollback(); // ROLLBACK
+    // connection.release();
+    logger.error(`App - updateUserInfo Query error\n: ${err.message}`);
+    return res.status(500).send(`Error: ${err.message}`);
+  }
+};
+
+// 06.profile API = 유저 프로필 조회
+exports.profile = async function (req, res) {
+  const { id } = req.verifiedToken;
+  const { userId } = req.params;
+  if (id != userId) {
     return res.json({
       isSucess: false,
-      code: 412,
-      message: "권한이 없습니다. 로그인을 먼저 해주세요!",
+      code: 411,
+      message: "권한이 없습니다.",
     });
+  }
+  try {
+    const userProfileRows = await userDao.selectUserProfile(id);
+    if (userProfileRows.length === 0) {
+      return res.json({
+        isSucess: false,
+        code: 412,
+        message: "존재하지 않는 userid입니다.",
+      });
+    }
+    return res.json({
+      result: userProfileRows,
+      isSuccess: true,
+      code: 200,
+      message: "유저프로필 정보 검색 성공",
+    });
+  } catch (err) {
+    logger.error(`App - selectUserProfile Query error\n: ${err.message}`);
+    return res.status(500).send(`Error: ${err.message}`);
   }
 };
 
@@ -343,7 +407,7 @@ exports.like = async function (req, res) {
         data: [],
         isSucess: false,
         code: 412,
-        message: "userIdx에 관심목록이 존재하지 않습니다.",
+        message: "userid에 관심목록이 존재하지 않습니다.",
       });
     }
 
@@ -379,7 +443,7 @@ exports.block = async function (req, res) {
       return res.json({
         isSuccess: false,
         code: 400,
-        message: "userIdx에 조회할 차단 사용자가 없습니다.",
+        message: "userid에 조회할 차단 사용자가 없습니다.",
       });
     }
     return res.json({
@@ -400,15 +464,9 @@ exports.changeBlock = async function (req, res) {
   const { targetUserIdx } = req.body;
 
   try {
-    const deleteUserBlockRows = await userDao.deleteUserBlock(
-      id,
-      targetUserIdx
-    );
+    const deleteUserBlockRows = await userDao.deleteUserBlock(id, targetUserIdx);
     if (deleteUserBlockRows.affectedRows === 0) {
-      const insertUserBlockRows = await userDao.insertUserBlock(
-        id,
-        targetUserIdx
-      );
+      const insertUserBlockRows = await userDao.insertUserBlock(id, targetUserIdx);
       if (insertUserBlockRows.length === 0) {
         return res.json({
           isSuccess: false,

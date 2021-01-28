@@ -5,10 +5,7 @@ async function selectUserLocation(userId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const selectUserLocationQuery = `select locationId, location, latitude, longitude, nearbyPost from Location where userId = ? and locationOrder = 'first';`;
   const selectUserLocationParams = [userId];
-  const [userLocationRows] = await connection.query(
-    selectUserLocationQuery,
-    selectUserLocationParams
-  );
+  const [userLocationRows] = await connection.query(selectUserLocationQuery, selectUserLocationParams);
   connection.release();
 
   return userLocationRows;
@@ -19,7 +16,7 @@ async function selectPost(userId, userLocationRows) {
   const connection = await pool.getConnection(async (conn) => conn);
   const { location, latitude, longitude, nearbyPost } = userLocationRows[0];
   const selectPostQuery = `
-  select Post.postId              as postIdx,
+  select Post.postId,            
   firstImageUrl as postImageUrl,
   postName,
   if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
@@ -81,15 +78,7 @@ and Post.categoryId in (select Category.categoryId
   where LikeCategory.userId = ? and LikeCategory.likeStatus = 1)
   and Post.sellerId not in (select targetUserId from Block where Block.userId = ?);
 `;
-  const selectPostParams = [
-    location,
-    latitude,
-    longitude,
-    latitude,
-    nearbyPost,
-    userId,
-    userId,
-  ];
+  const selectPostParams = [location, latitude, longitude, latitude, nearbyPost, userId, userId];
   const [postRows] = await connection.query(selectPostQuery, selectPostParams);
   connection.release();
 
@@ -97,21 +86,16 @@ and Post.categoryId in (select Category.categoryId
 }
 
 // 키워드에 해당하는 게시물 검색
-async function selectKeywordPost(
-  userId,
-  keyword,
-  showCompleted,
-  userLocationRows
-) {
+async function selectKeywordPost(userId, keyword, completed, userLocationRows) {
   const connection = await pool.getConnection(async (conn) => conn);
   const { location, latitude, longitude, nearbyPost } = userLocationRows[0];
-  if (showCompleted === "true") {
-    showCompleted = "3";
+  if (completed === "true") {
+    completed = "3";
   } else {
-    showCompleted = "2";
+    completed = "2";
   }
   const selectKeywordQuery = `
-  select Post.postId              as postIdx,
+  select Post.postId,           
   firstImageUrl                   as postImageUrl,
   postName,
   if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
@@ -176,13 +160,10 @@ and Post.sellerId not in (select targetUserId from Block where Block.userId = ?)
     nearbyPost,
     keyword,
     keyword,
-    showCompleted,
+    completed,
     userId,
   ];
-  const [postKeywordRows] = await connection.query(
-    selectKeywordQuery,
-    selectKeywordParams
-  );
+  const [postKeywordRows] = await connection.query(selectKeywordQuery, selectKeywordParams);
   connection.release();
 
   return postKeywordRows;
@@ -193,7 +174,7 @@ async function selectArticleInfo(postId, userLocationRows) {
   const connection = await pool.getConnection(async (conn) => conn);
   const { location } = userLocationRows[0];
   const selectArticleInfoQuery = `
-  select Post.postId as postIdx,
+  select Post.postId as postId,
        sellerId,
        if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
           SUBSTRING_INDEX(location, ' ', -1), location)
@@ -245,10 +226,7 @@ from Post
 where Post.postId = ? and Post.postStatus != 3;
 `;
   const selectArticleInfoParams = [location, postId];
-  const [articleInfoRows] = await connection.query(
-    selectArticleInfoQuery,
-    selectArticleInfoParams
-  );
+  const [articleInfoRows] = await connection.query(selectArticleInfoQuery, selectArticleInfoParams);
   connection.release();
 
   return articleInfoRows;
@@ -261,10 +239,7 @@ async function selectArticleImages(postId) {
   select imageNo, imageUrl from PostImage where postId = ?;
 `;
   const selectArticleImagesParams = [postId];
-  const [articleImagesRows] = await connection.query(
-    selectArticleImagesQuery,
-    selectArticleImagesParams
-  );
+  const [articleImagesRows] = await connection.query(selectArticleImagesQuery, selectArticleImagesParams);
   connection.release();
 
   return articleImagesRows;
@@ -277,10 +252,7 @@ async function selectLikeStatus(userId, postId) {
   select favoriteStatus from Favorite where userId = ? and PostId = ?;
 `;
   const selectLikeStatusParams = [userId, postId];
-  const [LikeStatusRows] = await connection.query(
-    selectLikeStatusQuery,
-    selectLikeStatusParams
-  );
+  const [LikeStatusRows] = await connection.query(selectLikeStatusQuery, selectLikeStatusParams);
   connection.release();
 
   return LikeStatusRows;
@@ -291,14 +263,13 @@ async function insertArticle(
   userId,
   postName,
   categoryIdx,
+  locationId,
   price,
   priceNegoPossible,
   contents,
-  postShowArea,
-  userLocationRows
+  postShowArea
 ) {
   const connection = await pool.getConnection(async (conn) => conn);
-  const { locationId } = userLocationRows[0];
   price === undefined ? (price = 0) : (price = price);
   const insertArticleQuery = `
   INSERT INTO Post (sellerId, postName, categoryId, locationId, price, contents, postShowArea, priceNegoPossible) 
@@ -314,10 +285,7 @@ async function insertArticle(
     postShowArea,
     priceNegoPossible,
   ];
-  const [articleRows] = await connection.query(
-    insertArticleQuery,
-    insertArticleParams
-  );
+  const [articleRows] = await connection.query(insertArticleQuery, insertArticleParams);
   connection.release();
 
   return articleRows;
@@ -331,10 +299,7 @@ async function insertPostImage(postId, imageUrl) {
   VALUES (?, ?);
 `;
   const insertPostImageParams = [postId, imageUrl];
-  const [postImageRows] = await connection.query(
-    insertPostImageQuery,
-    insertPostImageParams
-  );
+  const [postImageRows] = await connection.query(insertPostImageQuery, insertPostImageParams);
   connection.release();
 
   return postImageRows;
@@ -348,7 +313,7 @@ async function editArticle(
   priceNegoPossible,
   contents,
   postShowArea,
-  postIdx,
+  postId,
   userLocationRows
 ) {
   const connection = await pool.getConnection(async (conn) => conn);
@@ -367,12 +332,9 @@ async function editArticle(
     contents,
     postShowArea,
     priceNegoPossible,
-    postIdx,
+    postId,
   ];
-  const [editArticleRows] = await connection.query(
-    editArticleQuery,
-    editArticleParams
-  );
+  const [editArticleRows] = await connection.query(editArticleQuery, editArticleParams);
   connection.release();
 
   return editArticleRows;
@@ -383,17 +345,29 @@ async function editPostImage(imageIdx, imageUrl) {
   const connection = await pool.getConnection(async (conn) => conn);
   const editPostImageQuery = `
   UPDATE PostImage
-  SET imageUrl = ?
+  SET imageUrl = ?, imageStatus = 'Y'
   WHERE ImageNo = ?;
 `;
   const editPostImageParams = [imageUrl, imageIdx];
-  const [editPostImageRows] = await connection.query(
-    editPostImageQuery,
-    editPostImageParams
-  );
+  const [editPostImageRows] = await connection.query(editPostImageQuery, editPostImageParams);
   connection.release();
 
   return editPostImageRows;
+}
+
+// 상품 이미지 삭제
+async function deletePostImage(imageIdx) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const deletePostImageQuery = `
+    UPDATE PostImage
+    SET imageStatus = 'N'
+    WHERE ImageNo = ?;
+  `;
+  const deletePostImageParams = [imageIdx];
+  const [deletePostImageRows] = await connection.query(deletePostImageQuery, deletePostImageParams);
+  connection.release();
+
+  return deletePostImageRows;
 }
 
 // 상품 판매글 삭제
@@ -405,10 +379,7 @@ async function deleteArticle(postId) {
   WHERE postId = ?;
   `;
   const deleteArticleParams = [postId];
-  const [deleteArticleRows] = await connection.query(
-    deletePostQuery,
-    deleteArticleParams
-  );
+  const [deleteArticleRows] = await connection.query(deletePostQuery, deleteArticleParams);
   connection.release();
 
   return deleteArticleRows;
@@ -423,10 +394,7 @@ async function updateReserved(postIdx) {
   WHERE postId = ?;
   `;
   const updateReservedParams = [postIdx];
-  const [updateReservedRows] = await connection.query(
-    updateReservedQuery,
-    updateReservedParams
-  );
+  const [updateReservedRows] = await connection.query(updateReservedQuery, updateReservedParams);
   connection.release();
   return updateReservedRows;
 }
@@ -440,10 +408,7 @@ async function updateCompleted(postIdx) {
   WHERE postId = ?;
   `;
   const updateCompletedParams = [postIdx];
-  const [updateCompletedRows] = await connection.query(
-    updateCompletedQuery,
-    updateCompletedParams
-  );
+  const [updateCompletedRows] = await connection.query(updateCompletedQuery, updateCompletedParams);
   connection.release();
   return updateCompletedRows;
 }
@@ -456,10 +421,7 @@ async function insertLikeArticle(userIdx, postIdx) {
   VALUES (?, ?);
   `;
   const insertLikeArticleParams = [userIdx, postIdx];
-  const [insertLikeArticleRows] = await connection.query(
-    insertLikeArticleQuery,
-    insertLikeArticleParams
-  );
+  const [insertLikeArticleRows] = await connection.query(insertLikeArticleQuery, insertLikeArticleParams);
   connection.release();
   return insertLikeArticleRows;
 }
@@ -473,10 +435,7 @@ async function deletelikeArticle(userIdx, postIdx) {
   WHERE userId = ? and postId = ?;
   `;
   const deletelikeArticleParams = [userIdx, postIdx];
-  const [deletelikeArticleRows] = await connection.query(
-    deletelikeArticleQuery,
-    deletelikeArticleParams
-  );
+  const [deletelikeArticleRows] = await connection.query(deletelikeArticleQuery, deletelikeArticleParams);
   connection.release();
 
   return deletelikeArticleRows;
@@ -493,6 +452,7 @@ module.exports = {
   insertPostImage,
   editArticle,
   editPostImage,
+  deletePostImage,
   deleteArticle,
   updateReserved,
   updateCompleted,
