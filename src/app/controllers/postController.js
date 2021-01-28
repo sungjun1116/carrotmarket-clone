@@ -334,6 +334,7 @@ exports.editPost = async function (req, res) {
         message: "postId에 상품이 존재하지 않습니다.",
       });
     }
+    // adfadfad
 
     if (articleInfoRows[0].sellerId !== id) {
       return res.json({
