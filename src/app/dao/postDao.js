@@ -98,6 +98,7 @@ async function selectKeywordPost(userId, keyword, completed, userLocationRows) {
   select Post.postId,           
   firstImageUrl                   as postImageUrl,
   postName,
+  sellerId, 
   if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
      SUBSTRING_INDEX(location, ' ', -1), location)
                            as postLocation,
@@ -441,6 +442,90 @@ async function deletelikeArticle(userIdx, postIdx) {
   return deletelikeArticleRows;
 }
 
+// 모아보기
+async function collectPost(userId, location) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const collectPostQuery = `
+  select Post.postId,
+        firstImageUrl as postImageUrl,
+        postName,
+        userName,
+        if(SUBSTRING_INDEX(location, ' ', 1) = SUBSTRING_INDEX(?, ' ', 1),
+            SUBSTRING_INDEX(location, ' ', -1), location)
+                      as postLocation,
+        case
+            when Post.postStatus = 1
+              then '예약중'
+            when Post.postStatus = 2
+              then '거래완료'
+            else '판매중'
+            end       as postStatus,
+        price
+  from Post
+          inner join (select User.userId, userName, location
+                      from User
+                                inner join (select userId,
+                                                  location
+                                            from Location) UserLocation
+                                          on User.userId = UserLocation.userId) UserLocationTable
+                      on Post.sellerId = UserLocationTable.userId
+          inner join (select PostImage.postId, imageurl as firstImageUrl
+                      from PostImage
+                                inner join (select postId, min(imageNo) as firstImageNo
+                                            from PostImage
+                                            group by postId) firstImage
+                                          on PostImage.imageNO = firstImage.firstImageNo) PostImages
+                      on Post.postId = PostImages.postId
+  where userId in (select targetUserId from Collect where userId = ?)
+  `;
+  const collectPostParams = [location, userId];
+  const [collectPostRows] = await connection.query(collectPostQuery, collectPostParams);
+  connection.release();
+
+  return collectPostRows;
+}
+
+// collectStatusCheck
+async function selectCollectStatus(userId, targetUserId) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const selectCollectQuery = `
+                SELECT collectStatus
+                FROM Collect 
+                WHERE userId = ? and targetUserId = ?;
+                `;
+  const selectCollectParams = [userId, targetUserId];
+  const [collectStatus] = await connection.query(selectCollectQuery, selectCollectParams);
+  connection.release();
+
+  return collectStatus;
+}
+
+// insertCollect
+async function insertCollect(userId, targetUserId) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const insertCollectQuery = `
+        INSERT INTO Collect(userId, targetUserId)
+        VALUES (?, ?);
+    `;
+  const insertCollectParams = [userId, targetUserId];
+  const insertCollectRow = await connection.query(insertCollectQuery, insertCollectParams);
+  connection.release();
+  return insertCollectRow;
+}
+// updatecollect
+async function updateCollect(userId, targetUserId) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const updatecollectQuery = `
+        UPDATE Collect
+        SET collectStatus = if(collectStatus = 'Y', 'N', 'Y')
+        WHERE userId = ? and targetUserId = ?;
+    `;
+  const updatecollectParams = [userId, targetUserId];
+  const updatecollectRow = await connection.query(updatecollectQuery, updatecollectParams);
+  connection.release();
+  return updatecollectRow;
+}
+
 module.exports = {
   selectUserLocation,
   selectPost,
@@ -458,4 +543,8 @@ module.exports = {
   updateCompleted,
   insertLikeArticle,
   deletelikeArticle,
+  collectPost,
+  selectCollectStatus,
+  insertCollect,
+  updateCollect,
 };

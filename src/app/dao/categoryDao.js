@@ -34,7 +34,7 @@ async function selectCategoryStatus(userId, categoryId) {
 async function insertCategory(userId, categoryId) {
   const connection = await pool.getConnection(async (conn) => conn);
   const insertCategoryQuery = `
-        INSERT INTO LikeCategory(userID, categoryId)
+        INSERT INTO LikeCategory(userId, categoryId)
         VALUES (?, ?);
     `;
   const insertCategoryParams = [userId, categoryId];

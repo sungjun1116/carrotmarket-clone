@@ -61,7 +61,8 @@ exports.changeCategory = async function (req, res) {
     await conn.beginTransaction();
 
     const deleteCategoryRow = await categoryDao.deleteCategory(id, categoryId);
-    if (deleteCategoryRow.affectedRows === 0) {
+    console.log(deleteCategoryRow);
+    if (deleteCategoryRow[0].affectedRows === 0) {
       const insertCategoryRow = await categoryDao.insertCategory(id, categoryId);
       if (insertCategoryRow.length === 0) {
         return res.json({
@@ -73,7 +74,6 @@ exports.changeCategory = async function (req, res) {
     }
 
     const categoryStatus = await categoryDao.selectCategoryStatus(id, categoryId);
-    console.log(categoryStatus);
     if (categoryStatus[0].likeStatus === 1) {
       await conn.commit();
       return res.json({

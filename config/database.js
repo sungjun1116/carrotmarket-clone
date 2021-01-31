@@ -22,16 +22,12 @@ const exampleNonTransaction = async (sql, params) => {
       connection.release();
       return rows;
     } catch (err) {
-      logger.error(
-        `example non transaction Query error\n: ${JSON.stringify(err)}`
-      );
+      logger.error(`example non transaction Query error\n: ${JSON.stringify(err)}`);
       connection.release();
       return false;
     }
   } catch (err) {
-    logger.error(
-      `example non transaction DB Connection error\n: ${JSON.stringify(err)}`
-    );
+    logger.error(`example non transaction DB Connection error\n: ${JSON.stringify(err)}`);
     return false;
   }
 };
@@ -52,9 +48,7 @@ const exampleTransaction = async (sql, params) => {
       return false;
     }
   } catch (err) {
-    logger.error(
-      `example transaction DB Connection error\n: ${JSON.stringify(err)}`
-    );
+    logger.error(`example transaction DB Connection error\n: ${JSON.stringify(err)}`);
     return false;
   }
 };

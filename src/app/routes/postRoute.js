@@ -8,4 +8,6 @@ module.exports = function (app) {
   app.patch("/posts/:postId", jwtMiddleware, post.editPost);
   app.delete("/posts/:postId", jwtMiddleware, post.deletePost);
   app.patch("/posts/:postId/status", jwtMiddleware, post.updateStatus);
+  app.get("/collected-posts/:userId", jwtMiddleware, post.selectCollectedPost);
+  app.patch("/collected-posts/:userId/:targetUserId", jwtMiddleware, post.collectPost);
 };

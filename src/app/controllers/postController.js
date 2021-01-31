@@ -460,7 +460,7 @@ exports.deletePost = async function (req, res) {
   }
 };
 
-// 06. updateStatus API = 상품 예약중으로 변경
+// 06. updateStatus API = 상품 상태변경
 exports.updateStatus = async function (req, res) {
   const { id, location } = req.verifiedToken;
   const { postId } = req.params;
@@ -524,5 +524,95 @@ exports.updateStatus = async function (req, res) {
   } catch (err) {
     logger.error(`App - updateStatus Query error\n: ${err.message}`);
     return res.status(500).send(`Error: ${err.message}`);
+  }
+};
+
+// 07. selectCollectedPost API = 상품 모아보기
+exports.selectCollectedPost = async function (req, res) {
+  const { id, location } = req.verifiedToken;
+  const { userId } = req.params;
+
+  if (id != userId) {
+    return res.json({
+      isSucess: false,
+      code: 411,
+      message: "권한이 없습니다.",
+    });
+  }
+
+  try {
+    const collectPostRows = await postDao.collectPost(id, location);
+    if (collectPostRows.length > 0)
+      return res.json({
+        isSuccess: true,
+        code: 200,
+        message: "상품 모아보기 성공",
+        result: collectPostRows,
+      });
+    return res.json({
+      isSuccess: false,
+      code: 400,
+      message: "상품 모아보기 실패",
+    });
+  } catch (err) {
+    logger.error(`App - updateStatus Query error\n: ${err.message}`);
+    return res.status(500).send(`Error: ${err.message}`);
+  }
+};
+
+// 08. collectPost API = 상품 모아보기 추가 및 헤제
+exports.collectPost = async function (req, res) {
+  const { id } = req.verifiedToken;
+  const { userId, targetUserId } = req.params;
+
+  const conn = await pool.getConnection();
+
+  if (id != userId) {
+    return res.json({
+      isSucess: false,
+      code: 411,
+      message: "권한이 없습니다.",
+    });
+  }
+
+  try {
+    await conn.beginTransaction();
+
+    const updateCollectRow = await postDao.updateCollect(id, targetUserId);
+    console.log(updateCollectRow);
+    if (updateCollectRow[0].affectedRows === 0) {
+      const insertCollectRow = await postDao.insertCollect(id, targetUserId);
+      if (insertCollectRow.length === 0) {
+        return res.json({
+          isSuccess: false,
+          code: 400,
+          message: "모아보기 변경 실패",
+        });
+      }
+    }
+
+    const collectStatus = await postDao.selectCollectStatus(id, targetUserId);
+    console.log(collectStatus);
+    if (collectStatus[0].collectStatus === "Y") {
+      await conn.commit();
+      return res.json({
+        isSuccess: true,
+        code: 200,
+        message: "모아보기에 사용자 추가 성공",
+      });
+    } else {
+      await conn.commit();
+      return res.json({
+        isSuccess: true,
+        code: 201,
+        message: "모아보기에서 사용자 헤제 성공",
+      });
+    }
+  } catch (err) {
+    await conn.rollback();
+    logger.error(`App - collectPost Query error\n: ${err.message}`);
+    return res.status(500).send(`Error: ${err.message}`);
+  } finally {
+    conn.release();
   }
 };
