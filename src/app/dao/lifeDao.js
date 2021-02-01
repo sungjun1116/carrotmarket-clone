@@ -81,7 +81,51 @@ async function selectComment(postId) {
                     on C.locationId = UserLocationTable.locationId
             left outer join (select commentId, count(*) as sympathyCount from CommentSympathy group by commentId) S
             on C.commentId = S.commentId
-        where postId = ? and commentStatus='Y';
+        where postId = ? and commentStatus='Y'
+        order by C.updatedAt;
+  `;
+  const selectCommentsParams = [postId];
+  const [commentsRows] = await connection.query(selectCommentsQuery, selectCommentsParams);
+  connection.release();
+
+  return commentsRows;
+}
+
+// 게시물 댓글 조회
+async function selectCommentDesc(postId) {
+  const connection = await pool.getConnection(async (conn) => conn);
+  const selectCommentsQuery = `
+        select C.commentId,
+        C.userId as commentUserId,
+        profileImageUrl as commentUserProfileImageUrl,
+        userName as commentUserName,
+        contents as commentContents,
+        SUBSTRING_INDEX(location, ' ', -1) as commentLocation,
+        case
+            when TIMESTAMPDIFF(HOUR, C.updatedAt, current_timestamp()) >= 48
+                then '그저께'
+            when TIMESTAMPDIFF(HOUR, C.updatedAt, current_timestamp()) >= 24
+                then '어제'
+            when TIMESTAMPDIFF(HOUR, C.updatedAt, current_timestamp()) >= 1
+                then concat(TIMESTAMPDIFF(HOUR, C.updatedAt, current_timestamp()), '시간 전')
+            when TIMESTAMPDIFF(SECOND, C.updatedAt, current_timestamp()) >= 60
+                then concat(TIMESTAMPDIFF(MINUTE, C.updatedAt, current_timestamp()), '분 전')
+            else concat(TIMESTAMPDIFF(SECOND, C.updatedAt, current_timestamp()), '초 전')
+            end                            as commentUpdatedTime,
+        sympathyCount as commentLikedCount
+        from Comment C
+            inner join (select User.userId, userName, location, locationId, profileImageUrl
+                        from User
+                                inner join (select userId,
+                                                    locationId,
+                                                    location
+                                            from Location) UserLocation
+                                            on User.userId = UserLocation.userId) UserLocationTable
+                    on C.locationId = UserLocationTable.locationId
+            left outer join (select commentId, count(*) as sympathyCount from CommentSympathy group by commentId) S
+            on C.commentId = S.commentId
+        where postId = ? and commentStatus='Y'
+        order by C.updatedAt DESC;
   `;
   const selectCommentsParams = [postId];
   const [commentsRows] = await connection.query(selectCommentsQuery, selectCommentsParams);
@@ -123,7 +167,7 @@ async function selectReply(commetId) {
                     on R.locationId = UserLocationTable.locationId
             left outer join (select replyId, count(*) as sympathyCount from ReplySympathy group by replyId) S
             on R.replyId = S.replyId
-        where R.commentId = ? and replyStatus = 'Y';
+            where R.commentId = ? and replyStatus = 'Y';
     `;
   const selectReplyParams = [commetId];
   const [replyRows] = await connection.query(selectReplyQuery, selectReplyParams);
@@ -323,6 +367,7 @@ async function deletePost(postId) {
 module.exports = {
   selectPosts,
   selectComment,
+  selectCommentDesc,
   selectReply,
   selectSympathyStatus,
   selectCommentLiked,

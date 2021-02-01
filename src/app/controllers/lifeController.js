@@ -356,9 +356,15 @@ exports.deletePost = async function (req, res) {
 exports.selectComment = async function (req, res) {
   const { id } = req.verifiedToken;
   const { postId } = req.params;
+  const { sort } = req.query;
 
+  let commmentRows = ``;
   try {
-    const commmentRows = await lifeDao.selectComment(postId);
+    if (sort === "latest") {
+      commmentRows = await lifeDao.selectComment(postId);
+    } else {
+      commmentRows = await lifeDao.selectCommentDesc(postId);
+    }
     for (let i = 0; i < commmentRows.length; i++) {
       let commentLikedRows = await lifeDao.selectCommentLiked(id, commmentRows[i].commentId);
       if (commentLikedRows.length === 0 || commentLikedRows[0].rowStatus === "N") {
